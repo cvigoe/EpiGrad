@@ -18,6 +18,8 @@ import math
 import torch.optim as optim
 import torch.nn.functional as F
 
+import mlflow
+
 class Ortho():
     def __init__(self, k, epochs, lr, lmbda, model):
         self.k = int(k)
@@ -52,8 +54,8 @@ class Ortho():
                 ell = error + penalty
                 ell.backward()
                 self.opt.step()
-                
-                losses.append(ell.detach().cpu())
+                mlflow.log_metric('loss', ell.detach().cpu().item())
+                losses.append(ell.detach().cpu().item())
 
         return losses
 
