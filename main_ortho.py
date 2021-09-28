@@ -114,6 +114,7 @@ def ortho_experiment(variant, run_id):
 
     # Calculate AUC
     auc = calculate_auc(FPRs, TPRs)
+    mlflow.log_metric('AUC', auc)
     with open('data/AUCs.csv','a') as fd:
         fd.write(run_id + ', ' + str(auc) + '\n')
 
