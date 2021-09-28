@@ -76,13 +76,14 @@ class Ortho():
     def featurise_OOD(self, x):
         x = x.cuda()
         self.id_shape[0] = x.size(0)
-        if np.array_equal(self.id_shape, np.array(x.shape)):
-            return x
+        # if np.array_equal(self.id_shape, np.array(x.shape)):
+        #     return x
         data = torch.zeros(tuple(self.id_shape), device='cuda:0')
         if data.size(1) == 3:
-            data[:,[0],:28,:28] = x
-            data[:,[1],:28,:28] = x
-            data[:,[2],:28,:28] = x
+            n = x.size(2)
+            data[:,[0],:n,:n] = x
+            data[:,[1],:n,:n] = x
+            data[:,[2],:n,:n] = x
         else:
             data[:,:,:,:] = x[:,[0],:28,:28]
         return self.featurise(data)
