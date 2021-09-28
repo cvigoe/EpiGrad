@@ -84,7 +84,7 @@ def ortho_experiment(variant, run_id):
     )
     plt.legend() 
     plt.xlabel(r'$ || C^T \phi(X) || _2^2 $')
-    plt.title('Orthonormal Certificates')
+    plt.title('OC, k = ' + str(k) + r'; $\lambda = $' + str(lmbda))
     plt.savefig('figures/hist_' + run_id + '.pdf')
 
     # Generate ROC Curves
