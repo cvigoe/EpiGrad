@@ -80,10 +80,13 @@ class Ortho():
         #     return x
         data = torch.zeros(tuple(self.id_shape), device='cuda:0')
         if data.size(1) == 3:
-            n = x.size(2)
-            data[:,[0],:n,:n] = x
-            data[:,[1],:n,:n] = x
-            data[:,[2],:n,:n] = x
+            if np.array_equal(self.id_shape, np.array(x.shape)):
+                data = copy.deepcopy(x)
+            else:
+                n = x.size(2)
+                data[:,[0],:n,:n] = x
+                data[:,[1],:n,:n] = x
+                data[:,[2],:n,:n] = x
         else:
             data[:,:,:,:] = x[:,[0],:28,:28]
         return self.featurise(data)
