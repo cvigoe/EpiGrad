@@ -1,0 +1,16 @@
+variant = dict(
+    mlflow_uri="http://128.2.210.74:8080",
+    ID_model_name= 'mnist',                   
+    OOD_model_name= 'cifar10',                
+    k= 1e2,                                   
+    lr= 1e-4,                                 
+    lmbda= 1e-2,                              
+    epochs= 10,                               
+    batch_size= 64,                           
+    batch_size_epi= 1,                        
+    num_tests= 1000,                          
+    max_ent= False,                           
+    ROC_lower= 1e-5,                          
+    ROC_upper= 1-3,
+    num_ROC= 20,
+)   
