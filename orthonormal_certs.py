@@ -39,14 +39,13 @@ class Ortho():
             bias=False, device='cuda:0')
         self.opt = torch.optim.Adam(self.certs.parameters(), 
             lr=self.lr)
-        self.loss = torch.nn.L1Loss(reduction="none")        
+        self.loss = torch.nn.MSELoss()
         losses = []
         for epoch in tqdm.tqdm(range(self.epochs)):
-            for x, _ in train_data_loader:
+            for x, y in train_data_loader:
                 self.opt.zero_grad()
                 f = self.featurise(x)
-                error = self.loss(self.certs(f), 
-                    self.target(f)).mean()
+                error = self.loss(self.certs(f), self.target(f))
                 penalty = self.lmbda * \
                     (self.certs.weight @ self.certs.weight.t() - 
                      torch.eye(self.k, device='cuda:0')).pow(2).mean()
@@ -55,7 +54,6 @@ class Ortho():
                 self.opt.step()
                 
                 losses.append(ell.detach().cpu())
-                break
 
         return losses
 
@@ -64,29 +62,28 @@ class Ortho():
         if 'features' in dir(self.model):
             f = self.model.features(x.cuda())
             return torch.reshape(f, [batch_size,-1])
+        # Apparently need to squeeze input tensor to
+        # remove redundant channel dimension when 
+        # manually passing through layers...
         x = torch.reshape(x.cuda(), [batch_size,-1])
-        self.model.eval()
         num_layers = len(self.model.model)
         for layer_idx in range(num_layers-1):
             x = self.model.model[layer_idx](x)
         return x
 
     def featurise_OOD(self, x):
+        x = x.cuda()
         self.id_shape[0] = x.size(0)
+        if np.array_equal(self.id_shape, np.array(x.shape)):
+            return x
         data = torch.zeros(tuple(self.id_shape), device='cuda:0')
         if data.size(1) == 3:
             data[:,[0],:28,:28] = x
             data[:,[1],:28,:28] = x
             data[:,[2],:28,:28] = x
         else:
-            data[:,:,:] = x[:,[0],:28,:28]    
-        
-        batch_size = data.shape[0]
-        data = torch.reshape(data, [batch_size,-1])
-        num_layers = len(self.model.model)
-        for layer_idx in range(num_layers-1):
-            data = self.model.model[layer_idx](data)
-        return data
+            data[:,:,:,:] = x[:,[0],:28,:28]
+        return self.featurise(data)
 
     def target(self, x):
         return torch.zeros(x.size(0), self.k, device='cuda:0')

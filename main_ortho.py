@@ -33,8 +33,8 @@ import pudb
 
 def experiment(variant):
     # Train Certs
-    ID_model_name = variant['ID_model_name']    # ['mnist', 'cifar10', 'svhn', 'fashion']
-    OOD_model_name = variant['OOD_model_name']  # ['mnist', 'cifar10', 'svhn', 'fashion']
+    ID_model_name = variant['ID_model_name']    # ['mnist', 'cifar10', 'svhn']
+    OOD_model_name = variant['OOD_model_name']  # ['mnist', 'cifar10', 'svhn']
     k = variant['k']                            # [1e0, 1e1, 1e2, 1e3, 1e4]
     lr = variant['lr']                          # [1e-4]
     lmbda = variant['lmbda']                    # [1e-6, 1e-4, 1e-2, 1e0, 1e2]
@@ -66,30 +66,43 @@ def experiment(variant):
     plt.xlabel('Training Iteration')
     plt.ylabel('Orthonormal Certificates Loss')
     plt.title('Orthonormal Certificates Training Loss')
-    plt.savefig('training_loss.pdf')
+    plt.savefig('figures/training_loss.pdf')
 
     # Generate Histogram
     ID_certificates = []
-    for x, _ in tqdm.tqdm(ID_testing_loader):
-        id_shape = np.array(x.shape)
-        f = ortho.featurise(x, ID_model)
+    for x, y in tqdm.tqdm(ID_testing_loader):
+        f = ortho.featurise(x)
         certs = ortho(f)
-        for i in certs.pow(2).mean(axis=1).detach():
-            ID_certificates.append(i.item()) 
+        ID_certificates.append(torch.linalg.norm(certs.detach().cpu()).item())
 
     OOD_certificates = []
-    for x, _ in tqdm.tqdm(OOD_testing_loader):
-        f = ortho.featurise_OOD(x, OOD_model)
+    for x, y in tqdm.tqdm(OOD_testing_loader):
+        f = ortho.featurise_OOD(x)
         certs = ortho(f)
-        for i in certs.pow(2).mean(axis=1).detach():
-            OOD_certificates.append(i.item())     
+        OOD_certificates.append(torch.linalg.norm(certs.detach().cpu()).item())
 
-    pudb.set_trace()
+    plt.figure(dpi=300)
+    sns.kdeplot( ID_certificates,
+        fill=True, common_norm=False, palette="crest",
+        alpha=.5, linewidth=0, label='In Distribution', bw_adjust=0.2, log_scale=[True,False]
+    )
+    sns.kdeplot( OOD_certificates,
+        fill=True, common_norm=False, palette="crest",
+        alpha=.5, linewidth=0, 
+                label='Out of Distribution', bw_adjust=0.2, log_scale=[True,False]
+    )
+    plt.legend() 
+    plt.xlabel(r'$ || C^T \phi(X) || _2^2 $')
+    plt.title('Orthonormal Certificates')
+    plt.savefig('figures/hist.pdf')
 
     # Generate ROC Curves
-    FPRs = []
-    TPRs = []
-    for threshold in tqdm.tqdm(np.linspace(ROC_lower, ROC_upper, num_ROC)):
+
+    ROC_lower = np.log10(min(np.percentile(ID_certificates,1) , np.percentile(OOD_certificates,1)))
+    ROC_upper = np.log10(max(np.percentile(ID_certificates,99) , np.percentile(OOD_certificates,99)))
+
+    FPRs, TPRs = [], []
+    for threshold in tqdm.tqdm(np.logspace(ROC_lower, ROC_upper, num_ROC)):
         ID_results, count_id, OOD_results, count_ood = ROC_test(
             num_tests=num_tests, threshold=threshold, 
             id_loader=ID_testing_loader, 
@@ -100,18 +113,24 @@ def experiment(variant):
             batch_size_epi=batch_size_epi,
             certs=ortho)
 
-        FP = np.sum(ID_results)
-        N = count_id
-        TP = np.sum(OOD_results)
-        P = count_ood
-        FPR = FP/N
-        TPR = TP/P
+        FP, TP = np.sum(ID_results), np.sum(OOD_results)
+        N, P = count_id, count_ood
+        FPR, TPR = FP/N, TP/P
         FPRs.append(FPR)
         TPRs.append(TPR)
 
     plt.figure(dpi=300)
-    plt.plot(FPRs, TPRs, '-o')
-    plt.savefig('ROC.pdf')
+    plt.plot(FPRs, TPRs, '-o', label='OC, k = ' + str(k) + r'; $\lambda = $' + str(lmbda))
+    plt.legend(loc='lower right')
+    plt.xlim([-0.05,1.05])
+    plt.ylim([-0.05,1.05])
+    plt.title('ROC Curve \n ID = ' + ID_model_name + '; OOD = ' + OOD_model_name)
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.savefig('figures/roc.pdf')
+
+    np.savetxt("data/FPRs.csv", FPRs, delimiter=",")
+    np.savetxt("data/TPRs.csv", TPRs, delimiter=",")
 
     # Calculate AUC
 

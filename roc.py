@@ -27,10 +27,10 @@ def ROC_test(num_tests, threshold,
     network.eval()
     count_id = 0
     ID_results = []
+    count_ood = 0
+    OOD_results = []        
     id_shape = None
     MC_grad = None
-
-
 
     if optimizer is None:
         for data, target in id_loader:
@@ -39,17 +39,14 @@ def ROC_test(num_tests, threshold,
             cert = certs(certs.featurise(data))
             ID_results.append(torch.linalg.norm(cert.cpu()) > threshold)
             count_id += 1
-
-            count_ood = 0
-            OOD_results = []    
         
         for unshaped_data, target in ood_loader: 
             if count_ood >= num_tests:
                 break
-            cert = certs(certs.featurise_OOD(data))
+            cert = certs(certs.featurise_OOD(unshaped_data))
             OOD_results.append(torch.linalg.norm(cert.cpu()) > threshold)
             count_ood += 1
-
+            
         return ID_results, count_id, OOD_results, count_ood
 
     for data, target in id_loader:
