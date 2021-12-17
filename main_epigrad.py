@@ -34,11 +34,8 @@ import pudb
 def epigrad_experiment(variant, run_id):
     ID_model_name = variant['ID_model_name']    # ['mnist', 'cifar10', 'svhn']
     OOD_model_name = variant['OOD_model_name']  # ['mnist', 'cifar10', 'svhn']
-    batch_size_epi = variant['batch_size_epi']  # [1, 64]
     num_tests = variant['num_tests']            # [1000]
-    max_ent = variant['max_ent']                # [False]            
     num_ROC = variant['num_ROC']                # [20]
-    MC_iters = variant['MC_iters']              # [1000]
 
     ID_model, ID_fetcher, _ = selector.select(ID_model_name, cuda=True)
     OOD_model, OOD_fetcher, _ = selector.select(OOD_model_name, cuda=True)
@@ -52,11 +49,9 @@ def epigrad_experiment(variant, run_id):
     
     # Generate Histogram
     var_lb_id, var_lb_ood = epistemic_test(id_loader=ID_testing_loader, 
-        ood_loader=OOD_testing_loader, max_ent=False, 
-        id_dataset_name=ID_model_name, ood_dataset_name=OOD_model_name, 
-        network=ID_model, optimizer=optimiser, 
-        batch_size_epi=batch_size_epi,num_tests=num_tests, 
-        MC_iters=MC_iters)
+        ood_loader=OOD_testing_loader, id_dataset_name=ID_model_name, 
+        ood_dataset_name=OOD_model_name, network=ID_model, 
+        optimizer=optimiser, num_tests=num_tests)
 
     # Generate ROC Curves
     ROC_lower = np.log10(min(np.percentile(var_lb_id,1) , np.percentile(var_lb_ood,1)))
@@ -67,12 +62,11 @@ def epigrad_experiment(variant, run_id):
         ID_results, count_id, OOD_results, count_ood = ROC_test(
             num_tests=num_tests, threshold=threshold, 
             id_loader=ID_testing_loader, 
-            ood_loader=OOD_testing_loader, max_ent=False, 
+            ood_loader=OOD_testing_loader,
             id_dataset_name=ID_model_name, 
             ood_dataset_name=OOD_model_name,
-            network=ID_model, optimizer=optimiser, 
-            batch_size_epi=batch_size_epi,
-            certs=None, MC_iters=MC_iters)
+            network=ID_model, optimizer=optimiser,
+            certs=None)
 
         FP, TP = np.sum(ID_results), np.sum(OOD_results)
         N, P = count_id, count_ood
@@ -99,52 +93,44 @@ def epigrad_experiment(variant, run_id):
     plt.ylabel('True Positive Rate')
     plt.savefig('figures/epi_roc_' + run_id + '.pdf')
 
-def epistemic_test(id_loader, ood_loader, max_ent, 
-    id_dataset_name, ood_dataset_name, network, 
-    optimizer, batch_size_epi, num_tests, MC_iters):
+def epistemic_test(id_loader, ood_loader, id_dataset_name, 
+    ood_dataset_name, network, optimizer, num_tests):
     
     network.eval() 
-    var_lb_id = []    
-    count_id = 0
     id_shape = None
-    MC_grad = None
 
-    for i, (data, target) in enumerate(tqdm.tqdm(id_loader)):
+    epigrad_id = []    
+
+    for count_id, (data, target) in enumerate(tqdm.tqdm(id_loader)):
+
+        epigrad_inv = 0
         
         if id_shape is None:
             id_shape = list(data.shape)
         if count_id >= num_tests:
             break
 
-        for iteration in range(MC_iters):
+        for synthetic_label in range(10):
             optimizer.zero_grad()
             logits = network(data.cuda())
             log_probs = F.log_softmax(logits, dim=1)
-            labels = []
-            for i in range(data.shape[0]):
-                labels.append(np.random.choice(10, p=torch.exp(log_probs[i]).cpu().detach().numpy()))
-            
             # F.nll_loss gives the negative log-likelihood, and expects a vector of log-probabilities
-            loss = -1*F.nll_loss(log_probs, torch.tensor(labels).cuda())
+            loss = -1*F.nll_loss(log_probs, torch.tensor(synthetic_label).cuda())
             loss.backward()
             grad = []
             for param in network.parameters():
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
-            if MC_grad == None:
-                MC_grad = grad/MC_iters
-            else:
-                MC_grad += grad/MC_iters
+            norm2 = (torch.linalg.norm(grad)**2)
+            epigrad_inv += norm2*torch.exp(log_probs[synthetic_label])
         
-        f = (torch.linalg.norm(MC_grad)**2).cpu().detach().item()
-        var_lb_id.append(1/(f+1e-5))                
-        count_id += 1
+        epigrad_id.append(1/(epigrad_inv.cpu().detach().item()+1e-5))                
   
-    var_lb_ood = []
-    count_ood = 0
-    MC_grad = None    
+    epigrad_ood = []
 
-    for i, (unshaped_data, target) in enumerate(tqdm.tqdm(ood_loader)):
+    for count_ood, (unshaped_data, target) in enumerate(tqdm.tqdm(ood_loader)):
+
+        epigrad_inv = 0
 
         x = unshaped_data.cuda()
         id_shape[0] = x.size(0)
@@ -163,47 +149,39 @@ def epistemic_test(id_loader, ood_loader, max_ent,
         if count_ood >= num_tests:
             break
 
-        for iteration in range(MC_iters):
+        for synthetic_label in range(10):
             optimizer.zero_grad()
             logits = network(data.cuda())
             log_probs = F.log_softmax(logits, dim=1)
-            labels = []            
-            for i in range(data.shape[0]): 
-                labels.append(np.random.choice(10, p=torch.exp(log_probs[i]).cpu().detach().numpy()))
-            
-            # F.nll_loss gives the negative log-likelihood, and expects a vector of log-probabilities            
-            loss = -1*F.nll_loss(log_probs, torch.tensor(labels).cuda())
+            # F.nll_loss gives the negative log-likelihood, and expects a vector of log-probabilities
+            loss = -1*F.nll_loss(log_probs, torch.tensor(synthetic_label).cuda())
             loss.backward()
             grad = []
             for param in network.parameters():
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
-            if MC_grad == None:
-                MC_grad = grad/MC_iters
-            else:
-                MC_grad += grad/MC_iters
-                
-        f = (torch.linalg.norm(MC_grad)**2).cpu().detach().item()
-        var_lb_ood.append(1/(f+1e-5))
-        count_ood += 1            
+            norm2 = (torch.linalg.norm(grad)**2)
+            epigrad_inv += norm2*torch.exp(log_probs[synthetic_label])
+        
+        epigrad_ood.append(1/(epigrad_inv.cpu().detach().item()+1e-5))                    
     
     plt.figure(dpi=300)
-    sns.kdeplot( var_lb_id,
+    sns.kdeplot( epigrad_id,
         fill=True, common_norm=False, palette="crest",
         alpha=.5, linewidth=0, label='In Distribution', bw_adjust=0.2, log_scale=[True,False]
     )
-    sns.kdeplot( var_lb_ood,
+    sns.kdeplot( epigrad_ood,
         fill=True, common_norm=False, palette="crest",
         alpha=.5, linewidth=0, label='Out of Distribution', bw_adjust=0.2, log_scale=[True,False]
     )
     plt.legend() 
     plt.xlabel(r'$\mathrm{trace}(I(\theta; X^\star))^{-1}$')
-    plt.title('MC Iters: ' + str(MC_iters) + '; Num Epi Tests: '   \
-        + str(num_tests) + ';\nID: ' + id_dataset_name + '; OOD: ' \
-        + ood_dataset_name + '; Epi. Batch Size: ' + str(batch_size_epi))            
+    plt.title('Num Epi Tests: ' + str(num_tests) + \
+        ';\nID: ' + id_dataset_name + '; OOD: ' \
+        + ood_dataset_name)            
     plt.savefig('figures/epi_hist_' + run_id + '.pdf')
 
-    return var_lb_id, var_lb_ood
+    return epigrad_id, epigrad_ood
 
 def calculate_auc(FPRs, TPRs):
     auc = 0
