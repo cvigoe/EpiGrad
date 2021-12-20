@@ -122,7 +122,7 @@ def epistemic_test(id_loader, ood_loader, id_dataset_name,
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             norm2 = (torch.norm(grad)**2)
-            epigrad_inv += norm2*torch.exp(log_probs[0][synthetic_label])
+            epigrad_inv += norm2*(log_probs[0][synthetic_label])
         
         epigrad_id.append(1/(epigrad_inv.cpu().detach().item()+1e-5))                
   
@@ -161,7 +161,7 @@ def epistemic_test(id_loader, ood_loader, id_dataset_name,
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             norm2 = (torch.norm(grad)**2)
-            epigrad_inv += norm2*torch.exp(log_probs[0][synthetic_label])
+            epigrad_inv += norm2*(log_probs[0][synthetic_label])
         
         epigrad_ood.append(1/(epigrad_inv.cpu().detach().item()+1e-5))                    
     
