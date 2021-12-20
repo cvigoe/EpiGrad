@@ -115,14 +115,14 @@ def epistemic_test(id_loader, ood_loader, id_dataset_name,
             logits = network(data.cuda())
             log_probs = F.log_softmax(logits, dim=1)
             # F.nll_loss gives the negative log-likelihood, and expects a vector of log-probabilities
-            loss = -1*F.nll_loss(log_probs, torch.tensor(synthetic_label).cuda())
+            loss = -1*F.nll_loss(log_probs, torch.tensor([synthetic_label]).cuda())
             loss.backward()
             grad = []
             for param in network.parameters():
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
-            norm2 = (torch.linalg.norm(grad)**2)
-            epigrad_inv += norm2*torch.exp(log_probs[synthetic_label])
+            norm2 = (torch.norm(grad)**2)
+            epigrad_inv += norm2*torch.exp(log_probs[0][synthetic_label])
         
         epigrad_id.append(1/(epigrad_inv.cpu().detach().item()+1e-5))                
   
@@ -154,14 +154,14 @@ def epistemic_test(id_loader, ood_loader, id_dataset_name,
             logits = network(data.cuda())
             log_probs = F.log_softmax(logits, dim=1)
             # F.nll_loss gives the negative log-likelihood, and expects a vector of log-probabilities
-            loss = -1*F.nll_loss(log_probs, torch.tensor(synthetic_label).cuda())
+            loss = -1*F.nll_loss(log_probs, torch.tensor([synthetic_label]).cuda())
             loss.backward()
             grad = []
             for param in network.parameters():
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
-            norm2 = (torch.linalg.norm(grad)**2)
-            epigrad_inv += norm2*torch.exp(log_probs[synthetic_label])
+            norm2 = (torch.norm(grad)**2)
+            epigrad_inv += norm2*torch.exp(log_probs[0][synthetic_label])
         
         epigrad_ood.append(1/(epigrad_inv.cpu().detach().item()+1e-5))                    
     
@@ -180,6 +180,8 @@ def epistemic_test(id_loader, ood_loader, id_dataset_name,
         ';\nID: ' + id_dataset_name + '; OOD: ' \
         + ood_dataset_name)            
     plt.savefig('figures/epi_hist_' + run_id + '.pdf')
+
+    mlflow.log_artifact('figures/epi_hist_' + run_id + '.pdf')
 
     return epigrad_id, epigrad_ood
 
