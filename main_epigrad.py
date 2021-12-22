@@ -122,7 +122,7 @@ def epistemic_test(id_loader, ood_loader, id_dataset_name,
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             norm2 = (torch.norm(grad)**2)
-            epigrad_inv += norm2*(log_probs[0][synthetic_label])
+            epigrad_inv += norm2*torch.exp(log_probs[0][synthetic_label])
         
         epigrad_id.append(1/(epigrad_inv.cpu().detach().item()+1e-5))                
   
@@ -161,18 +161,25 @@ def epistemic_test(id_loader, ood_loader, id_dataset_name,
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             norm2 = (torch.norm(grad)**2)
-            epigrad_inv += norm2*(log_probs[0][synthetic_label])
+            epigrad_inv += norm2*torch.exp(log_probs[0][synthetic_label])
         
         epigrad_ood.append(1/(epigrad_inv.cpu().detach().item()+1e-5))                    
     
+    epigrad_id = np.array(epigrad_id)
+    epigrad_ood = np.array(epigrad_ood)
+
+    epigrad_id -= min(min(epigrad_id),min(epigrad_ood))
+    epigrad_id = epigrad_id/max(max(np.abs(epigrad_id)),max(np.abs(epigrad_ood)))
+    epigrad_ood -= min(min(epigrad_id),min(epigrad_ood))
+    epigrad_ood = epigrad_ood/max(max(np.abs(epigrad_id)),max(np.abs(epigrad_ood)))
     plt.figure(dpi=300)
     sns.kdeplot( epigrad_id,
-        fill=True, common_norm=False, palette="crest",
-        alpha=.5, linewidth=0, label='In Distribution', bw_adjust=0.2, log_scale=[True,False]
+        fill=True, common_norm=True, palette="crest",log_scale=[True,False],
+        alpha=.5, linewidth=0, label='In Distribution'
     )
     sns.kdeplot( epigrad_ood,
-        fill=True, common_norm=False, palette="crest",
-        alpha=.5, linewidth=0, label='Out of Distribution', bw_adjust=0.2, log_scale=[True,False]
+        fill=True, common_norm=True, palette="crest",log_scale=[True,False],
+        alpha=.5, linewidth=0, label='Out of Distribution'
     )
     plt.legend() 
     plt.xlabel(r'$\mathrm{trace}(I(\theta; X^\star))^{-1}$')
