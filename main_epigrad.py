@@ -211,8 +211,7 @@ def epistemic_test1(id_loader, ood_loader, id_dataset_name,
     for count_id, (data, target) in enumerate(tqdm.tqdm(id_loader)):
 
         score = 0
-        exp_grad = torch.zeros( sum(p.numel() for p in network.parameters() if p.requires_grad) ).cuda()
-        
+        exp_grad = torch.zeros( sum(p.numel() for p in list(network.parameters())[-depth*2:] if p.requires_grad) ).cuda()        
         if id_shape is None:
             id_shape = list(data.shape)
         if count_id >= num_tests:
@@ -239,7 +238,7 @@ def epistemic_test1(id_loader, ood_loader, id_dataset_name,
     for count_ood, (unshaped_data, target) in enumerate(tqdm.tqdm(ood_loader)):
 
         score = 0
-        exp_grad = torch.zeros( sum(p.numel() for p in network.parameters() if p.requires_grad) ).cuda()
+        exp_grad = torch.zeros( sum(p.numel() for p in list(network.parameters())[-depth*2:] if p.requires_grad) ).cuda()
 
         x = unshaped_data.cuda()
         id_shape[0] = x.size(0)
