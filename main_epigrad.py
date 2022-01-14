@@ -89,7 +89,7 @@ def epigrad_experiment(variant, run_id):
             auc = calculate_auc(FPRs, TPRs)
 
 
-        mlflow.log_metric('AUC', auc)
+        mlflow.log_metric('AUC-' + str(index) + ID_model_name + OOD_model_name, auc)
 
         plt.figure(dpi=300)
         plt.plot(FPRs, TPRs, label='EpiGrad' + str(index))
