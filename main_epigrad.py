@@ -20,6 +20,7 @@ import random
 import math
 import torch.optim as optim
 import torch.nn.functional as F
+from scipy.stats import entropy
 
 from orthonormal_certs import Ortho
 from roc import ROC_test
@@ -30,18 +31,21 @@ from mlflow.tracking import MlflowClient
 import sys
 import collections
 import pudb
+import imageio
 
-def epigrad_experiment(variant, run_id):
+def epigrad_experiment(variant, run_id, entropy_stats):
 
-    epistemic_test_functions = [epistemic_test0, epistemic_test1, epistemic_test2, epistemic_test3]
+    epistemic_test_functions = [epistemic_test0]
 
     for index, epistemic_test in enumerate(epistemic_test_functions):
         ID_model_name = variant['ID_model_name']    # ['mnist', 'cifar10', 'svhn']
         OOD_model_name = variant['OOD_model_name']  # ['mnist', 'cifar10', 'svhn']
         num_tests = variant['num_tests']            # [1000]
-
+        
         ID_model, ID_fetcher, _ = selector.select(ID_model_name, cuda=True)
         OOD_model, OOD_fetcher, _ = selector.select(OOD_model_name, cuda=True)
+
+        ID_model.eval()
 
         ID_testing_loader = ID_fetcher(batch_size=1, train=False, 
             val=True)
@@ -51,7 +55,8 @@ def epigrad_experiment(variant, run_id):
         optimiser = torch.optim.SGD(ID_model.parameters(), lr=1)
         
         # Generate Histogram
-        epigrad_id, epigrad_ood = epistemic_test(id_loader=ID_testing_loader, 
+        epigrad_id, epigrad_ood, entropies_id, entropies_ood = epistemic_test(
+            id_loader=ID_testing_loader, 
             ood_loader=OOD_testing_loader, id_dataset_name=ID_model_name, 
             ood_dataset_name=OOD_model_name, network=ID_model, 
             optimizer=optimiser, num_tests=num_tests)
@@ -88,7 +93,6 @@ def epigrad_experiment(variant, run_id):
             # Calculate AUC
             auc = calculate_auc(FPRs, TPRs)
 
-
         mlflow.log_metric('AUC-' + str(index) + ID_model_name + OOD_model_name, auc)
 
         plt.figure(dpi=300)
@@ -103,6 +107,17 @@ def epigrad_experiment(variant, run_id):
 
         mlflow.log_artifact('figures/epi_roc_' + str(index) + '_' + run_id + '.pdf')
 
+        plt.close()
+        plt.figure(dpi=300)
+        plt.scatter(entropies_id, epigrad_id, label='ID', s=1)
+        plt.scatter(entropies_ood, epigrad_ood, label='OOD', s=1)
+        plt.xlabel('Entropy')
+        plt.title('ID={}; OOD={}'.format(ID_model_name, OOD_model_name))
+        fname = 'figures/scatter_{}_{}_{}.pdf'.format(ID_model_name, OOD_model_name, run_id)
+        plt.savefig(fname) 
+        mlflow.log_artifact(fname)
+
+
 def epistemic_test0(id_loader, ood_loader, id_dataset_name, 
     ood_dataset_name, network, optimizer, num_tests):
     # Exp, Norm, Grad
@@ -110,6 +125,7 @@ def epistemic_test0(id_loader, ood_loader, id_dataset_name,
     id_shape = None
 
     epigrad_id = []    
+    entropies_id = []
     depth = 1
 
     for count_id, (data, target) in enumerate(tqdm.tqdm(id_loader)):
@@ -129,15 +145,19 @@ def epistemic_test0(id_loader, ood_loader, id_dataset_name,
             loss = -1*F.nll_loss(log_probs, torch.tensor([synthetic_label]).cuda())
             loss.backward()
             grad = []
-            for param in list(network.parameters())[-depth*2:]:                
+            # for param in list(network.parameters())[-depth*2:]:                
+            for param in network.parameters():
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             norm2 = (torch.norm(grad)**2)
             score += norm2*(torch.exp(log_probs[0][synthetic_label]))
-        
+
+        entropy = -1 * log_probs @ torch.exp(log_probs).T
+        entropies_id.append(entropy.cpu().detach().item()) 
         epigrad_id.append(score.cpu().detach().item())
   
     epigrad_ood = []
+    entropies_ood = []
 
     for count_ood, (unshaped_data, target) in enumerate(tqdm.tqdm(ood_loader)):
 
@@ -168,12 +188,15 @@ def epistemic_test0(id_loader, ood_loader, id_dataset_name,
             loss = -1*F.nll_loss(log_probs, torch.tensor([synthetic_label]).cuda())
             loss.backward()
             grad = []
-            for param in list(network.parameters())[-depth*2:]:                
+            # for param in list(network.parameters())[-depth*2:]:
+            for param in network.parameters():                
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             norm2 = (torch.norm(grad)**2)
             score += norm2*(torch.exp(log_probs[0][synthetic_label]))
         
+        entropy = -1 * log_probs @ torch.exp(log_probs).T
+        entropies_ood.append(entropy.cpu().detach().item())
         epigrad_ood.append(score.cpu().detach().item())
     
     epigrad_id = np.array(epigrad_id)
@@ -197,7 +220,7 @@ def epistemic_test0(id_loader, ood_loader, id_dataset_name,
 
     mlflow.log_artifact('figures/epi_hist_0_' + run_id + '.pdf')
 
-    return epigrad_id, epigrad_ood
+    return epigrad_id, epigrad_ood, entropies_id, entropies_ood
 
 def epistemic_test1(id_loader, ood_loader, id_dataset_name, 
     ood_dataset_name, network, optimizer, num_tests):
@@ -211,7 +234,8 @@ def epistemic_test1(id_loader, ood_loader, id_dataset_name,
     for count_id, (data, target) in enumerate(tqdm.tqdm(id_loader)):
 
         score = 0
-        exp_grad = torch.zeros( sum(p.numel() for p in list(network.parameters())[-depth*2:] if p.requires_grad) ).cuda()        
+        # exp_grad = torch.zeros( sum(p.numel() for p in list(network.parameters())[-depth*2:] if p.requires_grad) ).cuda()        
+        exp_grad = torch.zeros( sum(p.numel() for p in network.parameters() if p.requires_grad) ).cuda()
         if id_shape is None:
             id_shape = list(data.shape)
         if count_id >= num_tests:
@@ -225,7 +249,8 @@ def epistemic_test1(id_loader, ood_loader, id_dataset_name,
             loss = -1*F.nll_loss(log_probs, torch.tensor([synthetic_label]).cuda())
             loss.backward()
             grad = []
-            for param in list(network.parameters())[-depth*2:]:                
+            # for param in list(network.parameters())[-depth*2:]:                
+            for param in network.parameters():
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             exp_grad += grad*(torch.exp(log_probs[0][synthetic_label]))
@@ -238,8 +263,8 @@ def epistemic_test1(id_loader, ood_loader, id_dataset_name,
     for count_ood, (unshaped_data, target) in enumerate(tqdm.tqdm(ood_loader)):
 
         score = 0
-        exp_grad = torch.zeros( sum(p.numel() for p in list(network.parameters())[-depth*2:] if p.requires_grad) ).cuda()
-
+        # exp_grad = torch.zeros( sum(p.numel() for p in list(network.parameters())[-depth*2:] if p.requires_grad) ).cuda()
+        exp_grad = torch.zeros( sum(p.numel() for p in network.parameters() if p.requires_grad) ).cuda()
         x = unshaped_data.cuda()
         id_shape[0] = x.size(0)
         data = torch.zeros(tuple(id_shape), device='cuda:0')
@@ -265,7 +290,8 @@ def epistemic_test1(id_loader, ood_loader, id_dataset_name,
             loss = -1*F.nll_loss(log_probs, torch.tensor([synthetic_label]).cuda())
             loss.backward()
             grad = []
-            for param in list(network.parameters())[-depth*2:]:                
+            # for param in list(network.parameters())[-depth*2:]:                
+            for param in network.parameters():
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             exp_grad += grad*(torch.exp(log_probs[0][synthetic_label]))
@@ -322,7 +348,8 @@ def epistemic_test2(id_loader, ood_loader, id_dataset_name,
             loss = -1*F.nll_loss(log_probs, torch.tensor([synthetic_label]).cuda())
             loss.backward()
             grad = []
-            for param in list(network.parameters())[-depth*2:]:                
+            # for param in list(network.parameters())[-depth*2:]:          
+            for param in network.parameters():                  
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             norm2 = (torch.norm(grad)**2)
@@ -361,7 +388,8 @@ def epistemic_test2(id_loader, ood_loader, id_dataset_name,
             loss = -1*F.nll_loss(log_probs, torch.tensor([synthetic_label]).cuda())
             loss.backward()
             grad = []
-            for param in list(network.parameters())[-depth*2:]:                
+            # for param in list(network.parameters())[-depth*2:]:       
+            for param in network.parameters():                     
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             norm2 = (torch.norm(grad)**2)
@@ -405,7 +433,8 @@ def epistemic_test3(id_loader, ood_loader, id_dataset_name,
     for count_id, (data, target) in enumerate(tqdm.tqdm(id_loader)):
 
         score = 0
-        exp_grad = torch.zeros( sum(p.numel() for p in list(network.parameters())[-depth*2:] if p.requires_grad) ).cuda()
+        # exp_grad = torch.zeros( sum(p.numel() for p in list(network.parameters())[-depth*2:] if p.requires_grad) ).cuda()
+        exp_grad = torch.zeros( sum(p.numel() for p in network.parameters() if p.requires_grad) ).cuda()
         
         if id_shape is None:
             id_shape = list(data.shape)
@@ -420,7 +449,8 @@ def epistemic_test3(id_loader, ood_loader, id_dataset_name,
             loss = -1*F.nll_loss(log_probs, torch.tensor([synthetic_label]).cuda())
             loss.backward()
             grad = []
-            for param in list(network.parameters())[-depth*2:]:
+            # for param in list(network.parameters())[-depth*2:]:
+            for param in network.parameters():                
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             exp_grad += grad*(1/10)
@@ -433,7 +463,8 @@ def epistemic_test3(id_loader, ood_loader, id_dataset_name,
     for count_ood, (unshaped_data, target) in enumerate(tqdm.tqdm(ood_loader)):
 
         score = 0
-        exp_grad = torch.zeros( sum(p.numel() for p in list(network.parameters())[-depth*2:] if p.requires_grad) ).cuda()
+        # exp_grad = torch.zeros( sum(p.numel() for p in list(network.parameters())[-depth*2:] if p.requires_grad) ).cuda()
+        exp_grad = torch.zeros( sum(p.numel() for p in network.parameters() if p.requires_grad) ).cuda()        
 
         x = unshaped_data.cuda()
         id_shape[0] = x.size(0)
@@ -460,7 +491,8 @@ def epistemic_test3(id_loader, ood_loader, id_dataset_name,
             loss = -1*F.nll_loss(log_probs, torch.tensor([synthetic_label]).cuda())
             loss.backward()
             grad = []
-            for param in list(network.parameters())[-depth*2:]:
+            # for param in list(network.parameters())[-depth*2:]:
+            for param in network.parameters():                
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             exp_grad += grad*(1/10)
@@ -514,7 +546,13 @@ if __name__ == "__main__":
     run_name = sys.argv[2]
     note = sys.argv[3]
 
-    model_names = ['cifar10', 'mnist', 'svhn']
+    model_names = ['mnist', 'svhn', 'cifar10']
+
+    entropy_stats = {
+    'mnist': [],
+    'cifar10': [],
+    'svhn': [],
+    }
 
     for ID_model_name in model_names:
         for OOD_model_name in model_names:
@@ -530,4 +568,4 @@ if __name__ == "__main__":
                 run_id = run.info.run_id
                 mlflow.log_params(flatten_dict(variant))
                 client.set_tag(run.info.run_id, "mlflow.note.content", note)
-                epigrad_experiment(variant, run_id)
+                entropy_stats = epigrad_experiment(variant, run_id, entropy_stats)
