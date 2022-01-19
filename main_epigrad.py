@@ -35,7 +35,7 @@ import imageio
 
 def epigrad_experiment(variant, run_id, entropy_stats):
 
-    epistemic_test_functions = [epistemic_test0]
+    epistemic_test_functions = [epistemic_test3]
 
     for index, epistemic_test in enumerate(epistemic_test_functions):
         ID_model_name = variant['ID_model_name']    # ['mnist', 'cifar10', 'svhn']
@@ -429,6 +429,7 @@ def epistemic_test3(id_loader, ood_loader, id_dataset_name,
     depth = 1
 
     epigrad_id = []    
+    entropies_id = []
 
     for count_id, (data, target) in enumerate(tqdm.tqdm(id_loader)):
 
@@ -457,8 +458,11 @@ def epistemic_test3(id_loader, ood_loader, id_dataset_name,
 
         score += torch.norm(exp_grad,p=1)
         epigrad_id.append(score.cpu().detach().item())
+        entropy = -1 * log_probs @ torch.exp(log_probs).T
+        entropies_id.append(entropy.cpu().detach().item()) 
   
     epigrad_ood = []
+    entropies_ood = []
 
     for count_ood, (unshaped_data, target) in enumerate(tqdm.tqdm(ood_loader)):
 
@@ -498,6 +502,8 @@ def epistemic_test3(id_loader, ood_loader, id_dataset_name,
             exp_grad += grad*(1/10)
         score += torch.norm(exp_grad,p=1)
         epigrad_ood.append(score.cpu().detach().item())
+        entropy = -1 * log_probs @ torch.exp(log_probs).T
+        entropies_ood.append(entropy.cpu().detach().item())         
     
     epigrad_id = np.array(epigrad_id)
     epigrad_ood = np.array(epigrad_ood)
@@ -520,7 +526,7 @@ def epistemic_test3(id_loader, ood_loader, id_dataset_name,
 
     mlflow.log_artifact('figures/epi_hist_3_' + run_id + '.pdf')
 
-    return epigrad_id, epigrad_ood
+    return epigrad_id, epigrad_ood, entropies_id, entropies_ood
 
 
 def calculate_auc(FPRs, TPRs):
