@@ -35,7 +35,7 @@ import imageio
 
 def epigrad_experiment(variant, run_id, entropy_stats):
 
-    epistemic_test_functions = [epistemic_test3]
+    epistemic_test_functions = [epistemic_test0]
 
     for index, epistemic_test in enumerate(epistemic_test_functions):
         ID_model_name = variant['ID_model_name']    # ['mnist', 'cifar10', 'svhn']
@@ -149,7 +149,7 @@ def epistemic_test0(id_loader, ood_loader, id_dataset_name,
             for param in network.parameters():
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
-            norm2 = (torch.norm(grad)**2)
+            norm2 = (torch.norm(grad,p=1))
             score += norm2*(torch.exp(log_probs[0][synthetic_label]))
 
         entropy = -1 * log_probs @ torch.exp(log_probs).T
@@ -192,7 +192,7 @@ def epistemic_test0(id_loader, ood_loader, id_dataset_name,
             for param in network.parameters():                
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
-            norm2 = (torch.norm(grad)**2)
+            norm2 = (torch.norm(grad,p=1))
             score += norm2*(torch.exp(log_probs[0][synthetic_label]))
         
         entropy = -1 * log_probs @ torch.exp(log_probs).T
