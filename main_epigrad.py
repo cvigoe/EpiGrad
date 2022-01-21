@@ -35,7 +35,7 @@ import imageio
 
 def epigrad_experiment(variant, run_id, entropy_stats):
 
-    epistemic_test_functions = [epistemic_test_batch_grad]
+    epistemic_test_functions = [epistemic_test0, epistemic_test3, epistemic_test_batch_grad]
 
     for index, epistemic_test in enumerate(epistemic_test_functions):
         ID_model_name = variant['ID_model_name']    # ['mnist', 'cifar10', 'svhn']
@@ -120,7 +120,7 @@ def epigrad_experiment(variant, run_id, entropy_stats):
 
 def epistemic_test_batch_grad(id_loader, ood_loader, id_dataset_name, 
     ood_dataset_name, network, optimizer, num_tests, deep):
-    # Best EpiGrad with gradients additionally taken w.r.t. ID datapoints
+    # Original EpiGrad with L1 nrom and gradients additionally taken w.r.t. ID datapoints
     network.eval() 
     id_shape = None
 
@@ -254,7 +254,7 @@ def epistemic_test_batch_grad(id_loader, ood_loader, id_dataset_name,
 
 def epistemic_test0(id_loader, ood_loader, id_dataset_name, 
     ood_dataset_name, network, optimizer, num_tests, deep):
-    # Exp, Norm, Grad
+    # Original EpiGrad, with L1 norm
     network.eval() 
     id_shape = None
 
