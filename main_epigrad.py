@@ -36,8 +36,9 @@ import imageio
 def epigrad_experiment(variant, run_id, entropy_stats):
 
     epistemic_test_functions = [epistemic_test0, epistemic_test3, epistemic_test_batch_grad]
+    epistemic_test_names = ['EpiGradL1', 'GradNorm', 'EpiGradL1Batch']
 
-    for index, epistemic_test in enumerate(epistemic_test_functions):
+    for epistemic_test_name, epistemic_test in zip(epistemic_test_names, epistemic_test_functions):
         ID_model_name = variant['ID_model_name']    # ['mnist', 'cifar10', 'svhn']
         OOD_model_name = variant['OOD_model_name']  # ['mnist', 'cifar10', 'svhn']
         num_tests = variant['num_tests']            # [1000]
@@ -94,19 +95,19 @@ def epigrad_experiment(variant, run_id, entropy_stats):
             # Calculate AUC
             auc = calculate_auc(FPRs, TPRs)
 
-        mlflow.log_metric('AUC-' + str(index) + ID_model_name + OOD_model_name, auc)
+        mlflow.log_metric('AUC-' + epistemic_test_name + ID_model_name + OOD_model_name, auc)
 
         plt.figure(dpi=300)
-        plt.plot(FPRs, TPRs, label='EpiGrad' + str(index))
+        plt.plot(FPRs, TPRs, label=epistemic_test_name)
         plt.legend(loc='lower right')
         plt.xlim([-0.05,1.05])
         plt.ylim([-0.05,1.05])
         plt.title('ROC Curve; AUC = ' + str(auc) + '\n ID = ' + ID_model_name + '; OOD = ' + OOD_model_name)
         plt.xlabel('False Positive Rate')
         plt.ylabel('True Positive Rate')
-        plt.savefig('figures/epi_roc_' + str(index) + '_' + run_id + '.pdf')
+        plt.savefig('figures/epi_roc_' + epistemic_test_name + '_' + run_id + '.pdf')
 
-        mlflow.log_artifact('figures/epi_roc_' + str(index) + '_' + run_id + '.pdf')
+        mlflow.log_artifact('figures/epi_roc_' + epistemic_test_name + '_' + run_id + '.pdf')
 
         plt.close()
         plt.figure(dpi=300)
