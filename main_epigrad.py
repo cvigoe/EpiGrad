@@ -161,8 +161,8 @@ def epistemic_test_batch_grad(id_loader, ood_loader, id_dataset_name,
             loss += -1*F.nll_loss(log_probs, torch.tensor([synthetic_label]).cuda())
             loss.backward()
             grad = []
-            for param in list(network.parameters())[-depth*2:]:                
-            # for param in network.parameters():
+            # for param in list(network.parameters())[-depth*2:]:                
+            for param in network.parameters():
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             norm2 = (torch.norm(grad,p=1))
@@ -211,8 +211,8 @@ def epistemic_test_batch_grad(id_loader, ood_loader, id_dataset_name,
             loss += -1*F.nll_loss(log_probs, torch.tensor([synthetic_label]).cuda())
             loss.backward()
             grad = []
-            for param in list(network.parameters())[-depth*2:]:
-            # for param in network.parameters():                
+            # for param in list(network.parameters())[-depth*2:]:
+            for param in network.parameters():                
                 grad.append(param.grad.view(-1))
             grad = torch.cat(grad)
             norm2 = (torch.norm(grad,p=1))
