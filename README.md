@@ -17,3 +17,12 @@ Code is organised as follows:
 ├── orthonormal_certs.py                    # Where Orthonormal Certs are defined
 └── roc.py                                  # Functions to caluclate ROC
 ```    
+Hyperparameters should be specified in a file called `variant.py` in the top directory, and its contents should look like:
+```
+variant = dict(
+    mlflow_uri="http://128.2.210.74:8080",
+    num_tests= 10000,                             # Number of ID or OOD images to use when testing each method
+    deep=False,                                   # Whether to use entire network or just last layer
+    model_names=['mnist', 'svhn', 'cifar10'],     # Which datasets & pretrained networks to use
+    )
+```    
