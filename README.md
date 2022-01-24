@@ -5,3 +5,15 @@ To run a set of experiments, specify the datasets, number of tests, and whether 
 ```
 python -m pudb main.py "MLFlow_Experiment_Name" "MLFlow_run_prefix" "MLFlow note"
 ```
+Code is organised as follows:
+```
+.
+├── .gitignore                   
+├── README.md                   
+├── epistemic_tests.py                      # Where all the gradient-based OOD methods are defined
+├── helpers.py                              # Helper functions for plotting, AUC calculation etc.
+├── main.py                                 # Main script to run gradient-based OOD experiments
+├── main_ortho.py                           # Main script to run Orthonormal Certs experiments
+├── orthonormal_certs.py                    # Where Orthonormal Certs are defined
+└── roc.py                                  # Functions to caluclate ROC
+```    
