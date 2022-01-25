@@ -38,9 +38,8 @@ from variant import *
 
 def experiment(variant, run_id):
 
-    epistemic_test_functions = [epistemic_test_EG_term, 
-        epistemic_test_GN_term]
-    epistemic_test_names = ['EpiGradTerm', 'GradNormTerm']
+    epistemic_test_functions = [epistemic_test_EG_term]
+    epistemic_test_names = ['EpiGradTerm']
 
     for epistemic_test_name, epistemic_test in zip(
         epistemic_test_names, epistemic_test_functions):
