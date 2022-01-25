@@ -30,16 +30,17 @@ from scipy.stats import entropy
 from roc import ROC_test
 from epistemic_tests import (epistemic_test_epigrad_originalL1, 
                             epistemic_test_grad_norm,
-                            epistemic_test_batch_grad)
+                            epistemic_test_batch_grad,
+                            epistemic_test_GN_term,
+                            epistemic_test_EG_term)
 from helpers import (calculate_auc, flatten_dict)
 from variant import *
 
 def experiment(variant, run_id):
 
-    epistemic_test_functions = [epistemic_test_epigrad_originalL1, 
-                                epistemic_test_grad_norm, 
-                                epistemic_test_batch_grad]
-    epistemic_test_names = ['EpiGradL1', 'GradNorm', 'BatchGrad']
+    epistemic_test_functions = [epistemic_test_EG_term, 
+        epistemic_test_GN_term]
+    epistemic_test_names = ['EpiGradTerm', 'GradNormTerm']
 
     for epistemic_test_name, epistemic_test in zip(
         epistemic_test_names, epistemic_test_functions):
