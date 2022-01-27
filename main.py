@@ -62,9 +62,9 @@ def experiment(variant, run_id):
         ID_model.eval()
 
         ID_testing_loader = ID_fetcher(batch_size=1, train=False, 
-            val=True, shuffle=False)
+            val=True)
         OOD_testing_loader = OOD_fetcher(batch_size=1, train=False, 
-            val=True, shuffle=False)
+            val=True)
 
         optimiser = torch.optim.SGD(ID_model.parameters(), lr=1)
         
