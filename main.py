@@ -26,20 +26,26 @@ import numpy as np
 import torch.optim as optim
 import torch.nn.functional as F
 from scipy.stats import entropy
+import pickle
 
 from roc import ROC_test
 from epistemic_tests import (epistemic_test_epigrad_originalL1, 
                             epistemic_test_grad_norm,
                             epistemic_test_batch_grad,
                             epistemic_test_GN_term,
-                            epistemic_test_EG_term)
+                            epistemic_test_EG_term,
+                            encodings_outputs,
+                            epistemic_test_epigrad_originalL1_uniform,
+                            epistemic_test_epigrad_originalL22_uniform)
 from helpers import (calculate_auc, flatten_dict)
 from variant import *
 
 def experiment(variant, run_id):
 
-    epistemic_test_functions = [epistemic_test_GN_term]
-    epistemic_test_names = ['GradNormTerm']
+    epistemic_test_functions = [epistemic_test_epigrad_originalL1_uniform,
+                                epistemic_test_epigrad_originalL22_uniform]
+    epistemic_test_names = ['epistemic_test_epigrad_originalL1_uniform',
+                            'epistemic_test_epigrad_originalL22_uniform']
 
     for epistemic_test_name, epistemic_test in zip(
         epistemic_test_names, epistemic_test_functions):
@@ -56,12 +62,24 @@ def experiment(variant, run_id):
         ID_model.eval()
 
         ID_testing_loader = ID_fetcher(batch_size=1, train=False, 
-            val=True)
+            val=True, shuffle=False)
         OOD_testing_loader = OOD_fetcher(batch_size=1, train=False, 
-            val=True)
+            val=True, shuffle=False)
 
         optimiser = torch.optim.SGD(ID_model.parameters(), lr=1)
         
+        # # Temporary code to generate encodings & probabilities
+        # (feature_reps_id, logits_id, feature_reps_ood, logits_ood) = epistemic_test(
+        #     id_loader=ID_testing_loader, 
+        #     ood_loader=OOD_testing_loader, 
+        #     id_dataset_name=ID_model_name, 
+        #     ood_dataset_name=OOD_model_name, network=ID_model, 
+        #     optimizer=optimiser, num_tests=num_tests, deep=deep,
+        #     run_id=run_id)
+
+        # output = (feature_reps_ood, logits_ood)
+        # pickle.dump( output, open( 'data/logit_'+ID_model_name+OOD_model_name+".p", "wb" ) )
+
         # Generate Histogram
         (epigrad_id, epigrad_ood, 
         entropies_id, entropies_ood) = epistemic_test(
